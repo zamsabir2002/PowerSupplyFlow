@@ -1,0 +1,665 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Power Distribution System</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0px;
+            font-family: Arial, sans-serif;
+            background: #f5f5f5;
+        }
+
+        .navbar {
+            background-color: #2c3e50;
+            /* Dark Blue */
+            color: white;
+            text-align: center;
+            padding: 20px 0;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        }
+
+        .navbar-header h1 {
+            margin: 0;
+            font-size: 24px;
+            letter-spacing: 1px;
+            font-weight: 400;
+            text-transform: uppercase;
+        }
+
+        /* .navbar {
+            background: #05074bb9;
+            color: white;
+            padding: 1.2rem 2.5rem;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+        }
+
+        .navbar h1 {
+            margin: 0;
+            font-size: 1.6rem;
+            font-weight: 400;
+            letter-spacing: 0.5px;
+            color: #ffffff;
+            text-transform: none;
+        } */
+
+        .container {
+            width: 100%;
+            height: calc(100vh - 70px);
+            display: flex;
+            /* justify-content: center; */
+            /* overflow: scroll; */
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        /* .container {
+            width: 100%;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            overflow: hidden;
+        } */
+
+        svg {
+            width: 100%;
+            height: 100%;
+        }
+
+        .grid line {
+            stroke: #e0e0e0;
+            stroke-width: 1;
+        }
+
+        .link {
+            stroke-width: 2;
+            fill: none;
+        }
+
+        .link-flow {
+            stroke-dasharray: 10, 5;
+            animation: flowAnimation 1s linear infinite;
+        }
+
+        @keyframes flowAnimation {
+            from {
+                stroke-dashoffset: 15;
+            }
+
+            to {
+                stroke-dashoffset: 0;
+            }
+        }
+
+        .tooltip {
+            position: absolute;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 12px;
+            border-radius: 6px;
+            font-size: 14px;
+            line-height: 1.4;
+            font-family: monospace;
+            white-space: pre-line;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.3s;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+
+        .node text {
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .grid-tower-image {
+            width: 250px;
+            height: 250px;
+            transform: translate(-90px, -90px);
+        }
+
+        g {
+            transition: all;
+            transition-duration: 500ms;
+            transition-property: all;
+            transition-timing-function: cubic-bezier(0.075, 0.82, 0.165, 1);
+        }
+
+        /* g.transformer:hover {
+            transform: scale(1.2);
+        }
+
+        g.grid-tower:hover {
+            transform: scale(1.2);
+        }
+
+        g.generator:hover {
+            transform: scale(1.2);
+        } */
+    </style>
+</head>
+
+<body>
+    <!-- <nav class="navbar">
+        <h1>Running Load Display For Individual Genset</h1>
+    </nav> -->
+    <nav class="navbar">
+        <div class="navbar-header">
+            <h1>Running Load Display For Individual Genset</h1>
+        </div>
+    </nav>
+    <div class="container">
+        <div id="tooltip" class="tooltip"></div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+    <script>
+        const width = 1366;
+        const height = 968;
+
+        const svg = d3.select('.container')
+            .append('svg')
+            .attr('viewBox', `0 0 ${width} ${height}`);
+
+        // Generator symbol definition
+        const generatorSymbol = (type) => `
+            <g class="generator">
+                <rect x="-80" y="-60" width="160" height="120" fill="#3CB371"/>
+                <rect x="-70" y="-50" width="30" height="40" fill="#4A4A4A"/>
+                <circle cx="-55" cy="-40" r="5" fill="${type === 'diesel' ? '#4169E1' : '#FFD700'}"/>
+                <rect x="-65" y="-30" width="20" height="10" fill="#666"/>
+                <rect x="-40" y="-50" width="80" height="5" fill="#666"/>
+                <rect x="-40" y="-40" width="80" height="5" fill="#666"/>
+                <rect x="-40" y="-30" width="80" height="5" fill="#666"/>
+                <rect x="-70" y="0" width="20" height="20" fill="#333"/>
+                <rect x="-40" y="0" width="20" height="20" fill="#333"/>
+                <rect x="-90" y="30" width="180" height="20" fill="#2F4F4F"/>
+            </g>
+        `;
+
+        // Transformer symbol definition
+        const transformerSymbol = `
+            <g class="transformer">
+                <rect x="-60" y="-60" width="120" height="120" fill="#666"/>
+                <rect x="-70" y="-50" width="10" height="100" fill="#888"/>
+                <rect x="60" y="-50" width="10" height="100" fill="#888"/>
+                <rect x="-40" y="-40" width="80" height="80" fill="#B8860B"/>
+                <rect x="-80" y="60" width="160" height="10" fill="#4A4A4A"/>
+                <circle cx="-20" cy="-50" r="5" fill="#C0C0C0"/>
+                <circle cx="20" cy="-50" r="5" fill="#C0C0C0"/>
+            </g>
+        `;
+
+        const gridTowerSymbol = `
+            <g class="grid-tower">
+                <image href="powergrid.png" class="grid-tower-image"/>
+            </g>
+        `;
+
+        // Add generators with reduced spacing
+        const generators = [
+            { id: 'Gen #05', type: 'regular', x: 240, capacity: '1500 kVA', load: '1200 kVA', status: 'Running', efficiency: '92%' },
+            { id: 'Gen #06', type: 'regular', x: 340, capacity: '1500 kVA', load: '1100 kVA', status: 'Running', efficiency: '89%' },
+            { id: 'Gen #07', type: 'regular', x: 440, capacity: '1500 kVA', load: '1300 kVA', status: 'Running', efficiency: '91%' },
+            { id: 'Gen #08', type: 'regular', x: 540, capacity: '1500 kVA', load: '1250 kVA', status: 'Running', efficiency: '90%' },
+            { id: 'Gen #09', type: 'regular', x: 640, capacity: '1500 kVA', load: '1150 kVA', status: 'Standby', efficiency: '88%' },
+            { id: 'DG #01', type: 'diesel', x: 740, capacity: '2000 kVA', load: '1600 kVA', status: 'Running', efficiency: '85%' },
+            { id: 'DG #02', type: 'diesel', x: 840, capacity: '2000 kVA', load: '1400 kVA', status: 'Standby', efficiency: '87%' }
+        ];
+
+        // Draw generators
+        generators.forEach(gen => {
+            const group = svg.append('g')
+                .attr('transform', `translate(${gen.x}, 100) scale(0.4)`);
+
+            group.html(generatorSymbol(gen.type));
+
+            group.append('text')
+                .attr('x', 0)
+                .attr('y', 70)
+                .attr('text-anchor', 'middle')
+                .attr('transform', 'scale(2.5)')
+                .text(gen.id);
+        });
+
+        // Add transformers with adjusted positions
+        const transformers = [
+            { id: 'T03', x: 300, y: 250, kva: '2500 kVA', load: '2100 kVA', efficiency: '95%', temperature: '75°C', oil_level: 'Normal' },
+            { id: 'T02', x: 520, y: 250, kva: '2000 kVA', load: '1800 kVA', efficiency: '94%', temperature: '78°C', oil_level: 'Normal' },
+            { id: 'T01', x: 720, y: 250, kva: '2500 kVA', load: '2200 kVA', efficiency: '93%', temperature: '80°C', oil_level: 'Normal' }
+        ];
+
+        // Draw transformers
+        transformers.forEach(t => {
+            const group = svg.append('g')
+                .attr('transform', `translate(${t.x}, ${t.y}) scale(0.4)`);
+
+            group.html(transformerSymbol);
+
+            group.append('text')
+                .attr('x', 90)
+                .attr('y', 20)
+                .attr('text-anchor', 'middle')
+                .attr('transform', 'scale(2.5)')
+                .text(`${t.id}\n${t.kva}`);
+
+        });
+
+        // Add K.E. Feeders with adjusted positions
+        const feeders = [
+            { id: 'K.E 1 (Dedicated Feeder)', x: 500, y: 450, load: '4.5 MW', voltage: '11kV', current: '236A', power_factor: '0.92' },
+            { id: 'K.E 2 (Local Feeder)', x: 500, y: 750, load: '3 MW', voltage: '11kV', current: '157A', power_factor: '0.89' }
+        ];
+
+        // Draw feeders
+        feeders.forEach(f => {
+            const group = svg.append('g')
+                .attr('transform', `translate(${f.x}, ${f.y}) scale(0.3)`);
+
+            group.html(gridTowerSymbol);
+
+            group.append('text')
+                .attr('x', 0)
+                .attr('y', 140)
+                .attr('text-anchor', 'middle')
+                .attr('transform', 'scale(3.3)')
+                .text(`${f.id}\nSanctioned Load ${f.load}`);
+        });
+
+        // Updated substations with proper grouping and spacing
+        const substations = [
+            // Group 1
+            { id: 'Sub Station 2', y: 300, kva: '1091 kW', group: 1, load: '850 kW', voltage: '400V', current: '123A', power_factor: '0.92' },
+            { id: 'Sub Station 3', y: 350, kva: '1500 kVA', group: 1, load: '1200 kVA', voltage: '400V', current: '173A', power_factor: '0.88' },
+            { id: 'Sub Station 4', y: 400, kva: '1500 kVA', group: 1, load: '1100 kVA', voltage: '400V', current: '159A', power_factor: '0.91' },
+            { id: 'Sub Station 5A', y: 450, kva: '1000 kVA', group: 1, load: '800 kVA', voltage: '400V', current: '116A', power_factor: '0.89' },
+            { id: 'Sub Station 5B', y: 500, kva: '1500 kVA', group: 1, load: '1300 kVA', voltage: '400V', current: '188A', power_factor: '0.90' },
+            { id: 'Sub Station 7', y: 550, kva: '1500 kVA', group: 1, load: '1250 kVA', voltage: '400V', current: '181A', power_factor: '0.89' },
+            { id: 'Sub Station 9', y: 600, kva: '1500 kVA', group: 1, load: '1150 kVA', voltage: '400V', current: '166A', power_factor: '0.90' },
+            { id: 'Muslim Cotton', y: 650, kva: '750 kVA', group: 1, load: '600 kVA', voltage: '400V', current: '87A', power_factor: '0.89' },
+            // Group 2
+            { id: 'Sub Station 1', y: 800, kva: '1500 kVA', group: 2, load: '1200 kVA', voltage: '400V', current: '173A', power_factor: '0.91' },
+            { id: 'Sub Station 8', y: 850, kva: '1500 kVA', group: 2, load: '1300 kVA', voltage: '400V', current: '188A', power_factor: '0.90' },
+            { id: 'Sub Station 10', y: 900, kva: '1500 kVA', group: 2, load: '1100 kVA', voltage: '400V', current: '159A', power_factor: '0.89' }
+        ];
+
+
+
+        // Draw substations
+        substations.forEach(s => {
+            const group = svg.append('g')
+                .attr('transform', `translate(955, ${s.y})`);
+
+            group.append('rect')
+                .attr('x', -50)
+                .attr('y', -20)
+                .attr('width', 250)
+                .attr('height', 40)
+                .attr('fill', '#e8f5e9')
+                .attr('stroke', '#2E8B57')
+                .attr('stroke-width', 2)
+                .attr('rx', 5);
+
+            group.append('text')
+                .attr('x', 50)
+                .attr('y', 5)
+                .attr('text-anchor', 'middle')
+                .text(`${s.id}\n${s.kva}`);
+
+            group.append('g')
+                .attr('transform', `translate(160, -1) scale(0.2)`)
+                // Shrinking transformer when beside substation
+                .html(transformerSymbol);
+        });
+
+        // Draw distribution boxes
+        substations.forEach(s => {
+            const dist = svg.append('g')
+                .attr('transform', `translate(1200, ${s.y})`);
+
+            dist.append('rect')
+                .attr('x', 50)
+                .attr('y', -20)
+                .attr('width', 120)
+                .attr('height', 40)
+                .attr('fill', '#fff3e0')
+                .attr('stroke', '#ff9800')
+                .attr('stroke-width', 2)
+                .attr('rx', 5);
+
+            dist.append('text')
+                .attr('x', 110)
+                .attr('y', 5)
+                .attr('text-anchor', 'middle')
+                .text('Distribution');
+
+        });
+
+        // Function to create a bus line
+        const createBusLine = (x1, y1, x2, y2, offset = 0) => {
+            const midX = (x1 + x2) / 2;
+            if (offset === 0) {
+                return `M${x1},${y1} H${midX} V${y2} H${x2}`;
+            } else {
+                return `M${x1},${y1} H${midX + offset} V${y2} H${x2}`;
+            }
+        };
+
+        const createCurvedLine = (x1, y1, x2, y2, offset = 0) => {
+            const midX = (x1 + x2) / 2 + offset;
+            return `M${x1},${y1} C${midX},${y1} ${midX},${y2} ${x2},${y2}`;
+        };
+
+        const transformerPaths = svg.append('g')
+            .attr('class', 'transformer-paths');
+        // Create a group for KE paths
+        const kePaths = svg.append('g')
+            .attr('class', 'ke-paths');
+
+
+        svg.append("defs").append("marker")
+            .attr("id", "arrowhead")
+            .attr("viewBox", "0 0 10 10")
+            .attr("refX", 10) // Position of arrowhead
+            .attr("refY", 5)
+            .attr("markerWidth", 6)
+            .attr("markerHeight", 6)
+            .append("path")
+            .attr("d", "M 0 0 L 10 5 L 0 10 z") // Triangle shape
+            .attr("fill", "black"); // Change color if needed
+
+        substations.forEach(s => {
+            svg.append("line")
+                .attr("x1", 955 + 210) // Start from substation (adjust if needed)
+                .attr("y1", s.y) // Align to middle of substation
+                .attr("x2", 955 + 270) // End at distribution (adjust length)
+                .attr("y2", s.y) // Same Y for horizontal arrow
+                .attr("stroke", "black")
+                .attr("stroke-width", 2)
+                .attr("marker-end", "url(#arrowhead)"); // Attach arrowhead
+        });
+
+        // Draw main connections
+        // Generator bus
+        svg.append('path')
+            .attr('class', 'link')
+            .attr('stroke', '#4169E1')
+            .attr('d', createBusLine(20, 140, 900, 140));
+
+
+        // Connect generators to bus
+        generators.forEach(gen => {
+            svg.append('path')
+                .attr('class', 'link link-flow')
+                .attr('stroke', '#4169E1')
+                .attr('d', `M${gen.x},120 V140`);
+        });
+
+        const createReverseFork = () => {
+            // Main vertical line down from bus
+            svg.append('path')
+                .attr('class', 'link link-flow')
+                .attr('stroke', '#4169E1')
+                .attr('d', `M500,140 V180`);
+
+            // Create branching lines to transformers
+            transformers.forEach((t, index) => {
+                const startX = 500;
+                const startY = 180;
+                const endX = t.x;
+                const endY = t.y - 28;
+
+                // Calculate control points for smooth curve
+                const controlY = (startY + endY) / 2;
+
+                svg.append('path')
+                    .attr('class', 'link link-flow')
+                    .attr('stroke', '#4169E1')
+                    .attr('d', `M${startX},${startY} C${startX},${controlY} ${endX},${controlY} ${endX},${endY}`);
+            });
+        };
+
+        createReverseFork();
+
+        // Modified connection functions
+        const createImprovedCurvedLine = (x1, y1, x2, y2, offset = 0) => {
+            // First go down by 30 units
+            var dropY = y1 + 30;
+            if (x1 == 300) {
+                dropY -= 10;
+            }
+            // Calculate control points for smooth curve
+            const midX = (x1 + x2) / 2 + offset;
+            return `M${x1},${y1} 
+            L${x1},${dropY} 
+            C${midX},${dropY} ${midX},${y2} ${x2},${y2}`;
+        };
+
+
+        // Connect transformers to their specific substations
+        const connectTransformerToSubstation = (transformer, substationY, color, offset = 0) => {
+            transformerPaths.append('path')
+                .attr('class', 'link link-flow')
+                .attr('stroke', color)
+                .attr('d', createImprovedCurvedLine(
+                    transformer.x,
+                    transformer.y + 30,
+                    900,
+                    substationY,
+                    offset
+                ));
+        };
+
+
+        // T03 connections (red) with offset
+        connectTransformerToSubstation(transformers[0], 300, '#FF0000', -20);
+        connectTransformerToSubstation(transformers[0], 500, '#FF0000', -30);
+
+        // T02 connections (blue) with offset
+        connectTransformerToSubstation(transformers[1], 400, '#4169E1', 0);
+        connectTransformerToSubstation(transformers[1], 650, '#4169E1', 20);
+
+        // T01 connections (yellow) with offset
+        connectTransformerToSubstation(transformers[2], 350, '#FFD700', 30);
+        connectTransformerToSubstation(transformers[2], 550, '#FFD700', 40);
+
+        // KE1 connections to both groups with different offsets
+        substations.forEach((s, index) => {
+            const offset = (index % 2 === 0) ? 50 : -50;
+            kePaths.append('path')
+                .attr('class', 'link link-flow')
+                .attr('stroke', '#4169E1')
+                .attr('d', createCurvedLine(
+                    feeders[0].x + 50,
+                    feeders[0].y,
+                    900,
+                    s.y,
+                    offset
+                ));
+        });
+
+        // KE2 connections to Group 2 only with offset
+        substations.filter(s => s.group === 2).forEach((s, index) => {
+            const offset = index * 20;
+            kePaths.append('path')
+                .attr('class', 'link link-flow')
+                .attr('stroke', '#FFD700')
+                .attr('d', createCurvedLine(
+                    feeders[1].x + 50,
+                    feeders[1].y,
+                    900,
+                    s.y,
+                    offset
+                ));
+        });
+
+        // Fixed createTooltipContent function
+        function createTooltipContent(element) {
+            // Get transform attribute to find coordinates
+            const transform = element.getAttribute('transform');
+            if (!transform) return '';
+
+            const group = d3.select(element);
+
+            //////////////////////////////////////////////////////
+            // Work for Scaling
+            // Check to see if hover should be applied or not
+            const classValue = group.attr("class");
+            const parentGroup = group.node().parentNode; // Get the parent element
+            const parentTransform = d3.select(parentGroup).attr("transform");
+            if (classValue || parentTransform) {
+                return // return function which makes no changes to that component
+            }
+
+            const currentTransform = group.attr("transform") || "translate(0,0)"; // Default if no transform exists
+
+            // Extract the existing translate values
+            const transformMatch = currentTransform.match(/translate\(([^,]+),\s*([^)]+)\)/);
+            //////////////////////////////////////////////////////
+
+            // Parse the transform string to get x and y coordinates
+            const coords = transform.match(/translate\(([^,]+),\s*([^)]+)\)/);
+            if (!coords) return '';
+
+            const x = parseFloat(coords[1]);
+            const y = parseFloat(coords[2]);
+
+            // Check for generator
+            if (element.querySelector('.generator')) {
+                let scaleVal = 0.7;
+                group.transition()
+                    .duration(200)
+                    .attr("transform", `translate(${x}, ${y}) scale(${scaleVal})`);
+                const genData = generators.find(g => Math.abs(g.x - x) < 1);
+                if (!genData) return '';
+                return `Generator: ${genData.id}
+                Capacity: ${genData.capacity}
+                Current Load: ${genData.load}
+                Status: ${genData.status}
+                Efficiency: ${genData.efficiency}`;
+            }
+            // Check for transformer
+            else if (element.querySelector('.transformer') && x !== 955) {
+                let scaleVal = 0.6;
+                group.transition()
+                    .duration(200)
+                    .attr("transform", `translate(${x}, ${y}) scale(${scaleVal, scaleVal})`);
+                const transData = transformers.find(t => Math.abs(t.x - x) < 1 && Math.abs(t.y - y) < 1);
+                if (!transData) return '';
+                return `Transformer: ${transData.id}
+                Capacity: ${transData.kva}
+                Current Load: ${transData.load}
+                Efficiency: ${transData.efficiency}
+                Temperature: ${transData.temperature}
+                Oil Level: ${transData.oil_level}`;
+            }
+            // Check for grid tower (feeder)
+            else if (element.querySelector('.grid-tower')) {
+                let scaleVal = 0.5;
+                group.transition()
+                    .duration(200)
+                    .attr("transform", `translate(${x}, ${y}) scale(${scaleVal})`);
+                const feederData = feeders.find(f => Math.abs(f.x - x) < 1 && Math.abs(f.y - y) < 1);
+                if (!feederData) return '';
+                return `Feeder: ${feederData.id}
+                Load: ${feederData.load}
+                Voltage: ${feederData.voltage}
+                Current: ${feederData.current}
+                Power Factor: ${feederData.power_factor}`;
+            }
+            // Check for substation
+            else if (x === 955) {
+                let scaleVal = 1;
+                group.transition()
+                    .duration(200)
+                    .attr("transform", `translate(${x}, ${y}) scale(${scaleVal, scaleVal})`);
+                const subData = substations.find(s => Math.abs(s.y - y) < 1);
+                if (!subData) return '';
+                return `Substation: ${subData.id}
+                Capacity: ${subData.kva}
+                Current Load: ${subData.load}
+                Voltage: ${subData.voltage}
+                Current: ${subData.current}
+                Power Factor: ${subData.power_factor}`;
+            }
+
+            return '';
+        }
+
+        // Updated event handlers
+        d3.selectAll('g').on('mouseover', function (event) {
+            const tooltipContent = createTooltipContent(this);
+            if (tooltipContent) {
+                const tooltip = d3.select('#tooltip');
+                tooltip.html(tooltipContent.replace(/\n/g, '<br>'))
+                    .style('opacity', 1)
+                    .style('left', `${event.pageX + 10}px`)
+                    .style('top', `${event.pageY - 10}px`);
+
+                // Highlight related paths
+                d3.selectAll('.link').style('opacity', 0.3);
+                const parentGroup = this.closest('.transformer-paths, .ke-paths') || this.parentNode;
+                d3.select(parentGroup).selectAll('.link').style('opacity', 1);
+            }
+        }).on("mouseout", function () {
+            d3.select('#tooltip').style('opacity', 0);
+            d3.selectAll('.link').style('opacity', 0.8);
+
+            const group = d3.select(this);
+
+            // Check to see if hover should be applied or not
+            const classValue = group.attr("class");
+            const parentGroup = group.node().parentNode; // Get the parent element
+            const parentTransform = d3.select(parentGroup).attr("transform");
+            if (classValue || parentTransform) {
+                return // return function which makes no changes to that component
+            }
+
+            const currentTransform = group.attr("transform") || "translate(0,0)";
+            // Extract the translate values
+            const transformMatch = currentTransform.match(/translate\(([^,]+),\s*([^)]+)\)/);
+            if (transformMatch) {
+                const x = transformMatch[1];
+                const y = transformMatch[2];
+
+                const childG = group.select("g"); // Select child <g> element
+                const childClassValue = childG.attr("class"); // Get the class value of child <g>
+                let scaleVal = 1;
+                if (childClassValue == 'generator') scaleVal = 0.4
+                else if (childClassValue == 'transformer') scaleVal = 0.4
+                else if (childClassValue == 'grid-tower') scaleVal = 0.3
+                // else scaleVal = 1.2
+
+                // Reset scale
+                group.transition()
+                    .duration(200)
+                    .attr("transform", `translate(${x}, ${y}) scale(${scaleVal})`);
+            }
+        });
+        
+        const styleSheet = document.createElement('style');
+        styleSheet.textContent = `
+            .tooltip {
+                background: rgba(0, 0, 0, 0.8);
+                color: white;
+                padding: 12px;
+                border-radius: 6px;
+                font-size: 14px;
+                line-height: 1.4;
+                font-family: monospace;
+                white-space: pre-line;
+            }
+        `;
+
+        document.head.appendChild(styleSheet);
+
+    </script>
+</body>
+
+</html>
