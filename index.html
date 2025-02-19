@@ -6,9 +6,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Power Distribution System</title>
     <style>
-        body {
+        *{
+            box-sizing: border-box;
             margin: 0;
-            padding: 0px;
+            padding: 0;
+        }
+        body {
             font-family: Arial, sans-serif;
             background: #f5f5f5;
         }
@@ -124,24 +127,23 @@
             transform: translate(-90px, -90px);
         }
 
-        g {
-            transition: all;
-            transition-duration: 500ms;
-            transition-property: all;
-            transition-timing-function: cubic-bezier(0.075, 0.82, 0.165, 1);
+        @media (max-width: 1024px) {
+            .container {
+                height: calc(100dvh - 69px);
+            }
         }
 
-        /* g.transformer:hover {
-            transform: scale(1.2);
+        @media (max-width: 768px) {
+            .container {
+                height: calc(100dvh - 97px);
+            }
         }
-
-        g.grid-tower:hover {
-            transform: scale(1.2);
+        
+        @media (max-width: 480px) {
+            .container {
+                height: calc(100dvh - 97px);
+            }
         }
-
-        g.generator:hover {
-            transform: scale(1.2);
-        } */
     </style>
 </head>
 
@@ -162,10 +164,28 @@
     <script>
         const width = 1366;
         const height = 968;
+        const xPosition = 100;
+        const windowWidth = window.innerWidth;
+        const yPosition = windowWidth < 480 ? 500 : windowWidth < 780 ? 300: 50; // Adjust for mobile screen size
 
         const svg = d3.select('.container')
             .append('svg')
-            .attr('viewBox', `0 0 ${width} ${height}`);
+            .attr('viewBox', `${xPosition} ${yPosition} ${width} ${height}`);
+        // const svg = d3.select('.container')
+        //     .append('svg')
+        //     .attr('viewBox', `0 0 ${width} ${height}`);
+
+        function updateViewBox() {
+            const windowWidthUpdated = window.innerWidth;
+            const yPositionUpdated = windowWidthUpdated < 480 ? 500 : windowWidthUpdated < 780 ? 300: 100; // Adjust for mobile screen size
+
+            // Select the SVG and update the viewBox
+            d3.select('.container svg')
+                .attr('viewBox', `${xPosition} ${yPositionUpdated} ${width} ${height}`);
+        }
+
+        // Update the viewBox whenever the window is resized
+        window.addEventListener('resize', updateViewBox);
 
         // Generator symbol definition
         const generatorSymbol = (type) => `
